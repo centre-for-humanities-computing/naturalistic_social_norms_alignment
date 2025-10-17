@@ -1,0 +1,472 @@
+# MonopoletKultur: Danish Cultural Alignment Dataset Pipeline based on `Sara og Monopolet`
+
+**MonopoletKultur** is a dataset from on Danish radio podcast **[_Sara & Monopolet_](https://www.dr.dk/lyd/p4/sara-og-monopolet-podcast-1090358387000)**, where guests discuss real-life moral dilemmas.  
+The goal is to extract, align, and structure these conversations into a dataset for studying **cultural value alignment**, **moral reasoning**, and **ethical decision-making** in Danish.
+
+This repo contains dataset creation pipeline.
+
+---
+
+## Project Overview
+
+This pipeline turns raw podcast episodes into structured alignment data by performing:
+
+1. **Transcription** – Converts `.mp3` podcast audio into text using Whisper.
+2. **Parse Dilemmas and Filter Episodes** - extract list of dilemmas and filter episodes that miss them.
+3. **Speaker Diarization** – Separates speakers and annotates conversation segments.
+4. **Dilemma Extraction** – Parses the provided `.json` episode metadata to extract dilemma descriptions.
+5. **Text Alignment** – Uses embedding-based similarity search to approximately locate each dilemma in the transcribed dialogue.
+6. **Context Expansion (LLM)** – Expands the dilemma descriptions with full conversational context from the transcript.
+7. **Conclusion Extraction (LLM)** – Identifies one or more conclusions or resolutions per dilemma from the discussion.
+
+---
+
+## Expected Input
+
+The pipeline works on the episodes data, structured in the following way:
+
+```
+
+episodes_data/
+    ├── 2017-02-25-mads-og-monopolet-uge-8-14981712608.json
+    ├── 2017-02-25-mads-og-monopolet-uge-8-14981712608.mp3
+    ├── 2024-05-11-loerdag-11-maj-2024-15452448020.json
+    ├── 2024-05-11-loerdag-11-maj-2024-15452448020.mp3
+    ....
+````
+
+The dir contains `mp3` files and `json` metadata per episode. In the `json`, the following fields are required:
+
+**If filename contains the word mads in it, it will be considered to be a part of Mads of Monopolet podcast, which has different dilemma extraction**
+
+```json
+{
+  "description": "str, description of the episode, where dilemmas, guests and hosts are listed."
+}
+```
+
+---
+
+## Requirements
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+````
+
+### Core Dependencies
+
+| Library                       | Purpose                                          |
+| ----------------------------- | ------------------------------------------------ |
+| `openai-whisper`              | Transcription                                    |
+| `transformers`                | Embedding models & LLM inference                 |
+| `torch`                       | Required for model execution                     |
+| `sentence-transformers`       | Semantic search between dilemmas and transcripts |
+| `pyannote.audio`              | Speaker diarization                              |
+
+Set the `HF_TOKEN` that will let you use `pyannote.audio` models. 
+
+Install `ffmpeg`.
+
+---
+
+## Pipeline Steps
+
+### 1. Transcription
+
+Prepare the [hviske-v3-conversation](https://huggingface.co/syvai/hviske-v3-conversation) model into suitable format for the whisper CLI.
+
+````python
+from transformers import AutoModelForSpeechSeq2Seq
+
+model = AutoModelForSpeechSeq2Seq.from_pretrained("hviske-v3-conversation")
+
+model.save_pretrained("WhisperCLI - hviske-v3-conversation", safe_serialization=False)
+````
+
+Transcribes audio into text via [transcribe_parallel.py](transcribe_parallel.py).
+
+```bash
+python transcribe_parallel.py \
+--audio_dir "episodes_data" \
+--savedir "Transcript -- hviske-v3-conversation -- sara-og-monopolet" \
+--modeldir "WhisperCLI - hviske-v3-conversation" \
+--num_gpus 2 \
+--n_per_device 4
+```
+
+To see explanation of the parameters, run 
+```commandline
+python transcribe_parallel.py -h
+```
+
+**Output: ** In the provided `savedir` all outputs of the whisper will be saved (`json`, `srt`, `tsv`, `txt`, `vtt`)
+
+
+---
+
+### 2. Parse Dilemmas and Filter Episodes
+
+We suggest  using jupyter notebook for this, as it could require some tweaks and manual fixes of the typos.
+
+Our approach consists of 
+
+1. Separate episode into the sections based on the separators in the text. The podcast is usually separated by sections and music brakes, which indicate the dilemmas discussions. This separation provides clear boundaries on the dilemmas and parts of the discussion, as typically once the break is over, the topic of the conversation is changed. If the episode is not separable, we will filter it out.
+2. Parse dilemmas from the descriptions of the episodes. If no list of dilemmas is provided there - filter this episode.
+
+Notebooks to do that:
+1. [CheckSections.ipynb](CheckSections.ipynb). Produces a new dir `filtered_meta`, which contains parsed dilemmas and filtered episodes. Specifically:
+```
+
+filtered_meta/
+    ├── filtered_filenames.json
+    ├── parsed_descriptions.json
+````
+
+`filtered_filenames.json` is the list of filenames with `json`extension. Kept files that had dilemmas in them and the number is roughly the same as the number of sections.
+`parsed_descriptions.json` is the dict of filenames as keys and parsed output as value. Example:
+```json
+{
+  "raw_monopolet": "Kjartan Arngrim, Sara Blædel og Simon Jul.",
+  "parsed_monopolet": ["Kjartan Arngrim", "Sara Blædel", "Simon Jul."], 
+  "host": "Mads Steffensen.", 
+  "dilemmas": [
+    "Jan er frustreret over, at hans venner kun sms'er og ikke giver sig tid til at ringe til fødselsdage", 
+    "Berit og Prebens 7-årige datter er begyndt at imitere sproget fra  gangster-rap", "Sisse er frustreret over, at hendes veninde altid inviterer til fødselsdag uden mad og drikke",
+    "Malvina har ikke set sin far i 8 år, nu er han alvorligt syg, og hun er i tvivl, om hun skal se ham.", 
+    "Matilde og Signe har altid meget røde kinder, og folk påtaler det konstant. 6.Christina er livredder og i en svømmehal, hvor de er i tvivl om, hvor transkønnede skal klæde om.", 
+    "Nannas naboer laver en tilbygning, der kommer til at tage Nannas udsigt.",
+    "Lisa er ked af, at der var en stripper til hendes kærestes polterabend.", "Berit og Preben ved ikke, om de skal takke ja til den udstationering, Preben har fået tilbudt.", 
+    "Cille vil gerne have de koncertbilletter, hun gav til sin ekskæreste koncertbilletter, før de gik fra hinanden."]}
+```
+
+2. Fix inconsistancies with the dilemmas. Usually, there are 10 dilemmas per episode, but sometimes the parser extracts more or less. THere is a small amount of samples with this issue, so it is advised to go through them manually. We did it in: [CheckDilemmas.ipynb](CheckDilemmas.ipynb).
+Output: creates one more file in the `filtered_meta`: `reviewed_parsed_descriptions.json`. The format is the same as `parsed_descriptions.json`, just the issues is fixed with dilemmas' list.
+
+---
+
+### 3. Speaker Diarization
+
+`pyannote.audio` required wav format. Convert all of your audio files to wav with ffmpeg or other approach. For example:
+
+```bash
+for i in *.mp3; do ffmpeg -i "$i" -ac 1 "${i%.*}.wav"; done
+```
+
+Perform speaker diarization:
+
+```bash
+python diarize.py \
+--wav_dir "episodes_data/wav" \
+--savedir "Diarization -- hviske-v3-conversation -- sara-og-monopolet" \
+--filtered_filenames_json "filtered_meta/filtered_filenames.json" \
+--parsed_descriptions_json "filtered_meta/parsed_descriptions.json" \
+--transcripts_path "Transcript -- hviske-v3-conversation -- sara-og-monopolet" \
+--num_gpus 2 \
+--n_per_device 4
+```
+
+To see explanation of the parameters, run 
+```commandline
+python diarize.py -h
+```
+
+**Output:** Saves json files with speaker diarization into `savedir`. It appends the new key `speaker` to each segment.
+
+---
+
+### 4. Match Dilemmas in Transcript
+
+Finds approximate locations of each dilemma using embedding similarity search.
+
+```bash
+python match_dilemmas.py \
+--embedding_model "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2" \
+--n_chunks 3 \
+--top_k 20 \
+--filtered_filenames_json "filtered_meta/filtered_filenames.json" \
+--parsed_descriptions_json "filtered_meta/reviewed_parsed_descriptions.json" \
+--speakers_loaddir "Diarization -- hviske-v3-conversation -- sara-og-monopolet" \
+--savepath "ApproxDilemmasSegmentLocation.json"
+```
+
+**Output:** json file, see example below:
+
+```json
+{
+  "Sara har fundet en vielsesring og kan ikke finde ejeren, så hvad skal hun nu gøre med den.": {
+    "top_20_similarities": [
+      {
+        "end": 2851,
+        "similarity": 0.7505638003349304,
+        "start": 2848
+      },
+      {
+        "start": 179,
+        "end": 181,
+        "similarity": 0.6822819709777832
+      },
+      {
+        "start": 233,
+        "end": 236,
+        "similarity": 0.6681851744651794
+      },
+      {
+        "start": 2849,
+        "end": 2853,
+        "similarity": 0.5255310535430908
+      },
+      {
+        "start": 2850,
+        "end": 2854,
+        "similarity": 0.6008042693138123
+      },
+      {
+        "start": 325,
+        "end": 327,
+        "similarity": 0.5977734327316284
+      },
+      {
+        "start": 326,
+        "end": 328,
+        "similarity": 0.5957444906234741
+      },
+      {
+        "start": 178,
+        "end": 180,
+        "similarity": 0.594028651714325
+      },
+      {
+        "start": 180,
+        "end": 182,
+        "similarity": 0.5873260498046875
+      },
+      {
+        "start": 327,
+        "end": 329,
+        "similarity": 0.559314489364624
+      },
+      {
+        "start": 256,
+        "end": 258,
+        "similarity": 0.5538596510887146
+      },
+      {
+        "start": 218,
+        "end": 220,
+        "similarity": 0.5498809814453125
+      },
+      {
+        "start": 1364,
+        "end": 1366,
+        "similarity": 0.538526713848114
+      },
+      {
+        "start": 1224,
+        "end": 1228,
+        "similarity": 0.5308488011360168
+      },
+      {
+        "start": 219,
+        "end": 221,
+        "similarity": 0.5296032428741455
+      },
+      {
+        "start": 1182,
+        "end": 1185,
+        "similarity": 0.5292450189590454
+      },
+      {
+        "start": 192,
+        "end": 194,
+        "similarity": 0.521690309047699
+      },
+      {
+        "start": 257,
+        "end": 259,
+        "similarity": 0.5165324211120605
+      },
+      {
+        "start": 234,
+        "end": 237,
+        "similarity": 0.5144762396812439
+      },
+      {
+        "start": 309,
+        "end": 312,
+        "similarity": 0.5140269994735718
+      }
+    ],
+    "selected": {
+      "start": 178,
+      "end": 180,
+      "similarity": 0.594028651714325
+    }
+  },
+  "Liv har brudt kontakten med sin alkoholiserede far, men nu er han alvorligt syg.": {
+    "top_20_similarities": [
+      {
+        "start": 406,
+        "end": 408,
+        "similarity": 0.7122139930725098
+      },
+      {
+        "start": 2852,
+        "end": 2855,
+        "similarity": 0.5299146175384521
+      },
+      {
+        "start": 405,
+        "end": 407,
+        "similarity": 0.6615337133407593
+      },
+      {
+        "start": 432,
+        "end": 434,
+        "similarity": 0.6382350921630859
+      },
+      {
+        "start": 381,
+        "end": 383,
+        "similarity": 0.6349648237228394
+      },
+      {
+        "start": 380,
+        "end": 382,
+        "similarity": 0.6204788088798523
+      },
+      {
+        "start": 382,
+        "end": 384,
+        "similarity": 0.6133018732070923
+      },
+      {
+        "start": 449,
+        "end": 451,
+        "similarity": 0.6112603545188904
+      },
+      {
+        "start": 404,
+        "end": 406,
+        "similarity": 0.6057618856430054
+      },
+      {
+        "start": 385,
+        "end": 388,
+        "similarity": 0.6057490110397339
+      },
+      {
+        "start": 2039,
+        "end": 2041,
+        "similarity": 0.5962234735488892
+      },
+      {
+        "start": 448,
+        "end": 450,
+        "similarity": 0.5834062099456787
+      },
+      {
+        "start": 433,
+        "end": 435,
+        "similarity": 0.5575213432312012
+      },
+      {
+        "start": 395,
+        "end": 398,
+        "similarity": 0.5507144927978516
+      },
+      {
+        "start": 383,
+        "end": 386,
+        "similarity": 0.5310723781585693
+      },
+      {
+        "start": 2849,
+        "end": 2853,
+        "similarity": 0.5255310535430908
+      },
+      {
+        "start": 430,
+        "end": 432,
+        "similarity": 0.5210082530975342
+      },
+      {
+        "start": 434,
+        "end": 436,
+        "similarity": 0.5156528353691101
+      },
+      {
+        "start": 482,
+        "end": 484,
+        "similarity": 0.5135805010795593
+      },
+      {
+        "start": 384,
+        "end": 387,
+        "similarity": 0.5070387125015259
+      }
+    ],
+    "selected": {
+      "start": 380,
+      "end": 382,
+      "similarity": 0.6204788088798523
+    }
+  }
+}
+```
+
+`selected` is the key of the earliest appearance of the dilemma out of the top_k most similar chunks.
+
+---
+
+### 5. LLM Context Enhancement
+
+Expands each dilemma by pulling relevant transcript segments (contextual reasoning, discussion).
+
+```bash
+python scripts/05_enhance_context.py --input data/processed/matched --output data/processed/enhanced
+```
+
+**Output:** Enhanced dilemmas with extended narrative and context.
+
+---
+
+### 6. Conclusion Extraction
+
+Uses an LLM to extract one or more conclusions (final judgments or advice) per dilemma.
+
+```bash
+python scripts/06_extract_conclusions.py --input data/processed/enhanced --output data/processed/conclusions
+```
+
+**Output:** Final JSONL dataset with structured dilemmas, reasoning, and conclusions.
+
+---
+
+## Output Dataset Structure
+
+
+---
+
+
+## Citation
+
+If you use this pipeline or data in your research:
+
+```
+@dataset{monoalign_2025,
+  title = {MonoAlign: Danish Cultural Alignment Dataset},
+  author = {Your Name},
+  year = {2025},
+  url = {https://github.com/yourusername/monoalign}
+}
+```
+
+---
+
+##  Contact
+
+For questions, collaborations, or cultural alignment research:
+**[[your.email@example.com](mailto:your.email@example.com)]**
+
