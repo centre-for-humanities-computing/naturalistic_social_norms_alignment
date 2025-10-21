@@ -422,13 +422,42 @@ python match_dilemmas.py \
 
 ### 5. LLM Context Enhancement
 
-Expands each dilemma by pulling relevant transcript segments (contextual reasoning, discussion).
-
 ```bash
-python scripts/05_enhance_context.py --input data/processed/matched --output data/processed/enhanced
+python extend_dilemmas.py \
+--modelname "gpt-5-mini" \
+--parsed_approx_dilemmas_sections_path "ApproxDilemmasSegmentLocation.json" \
+--transcript_loaddir "SpeakerDiarizedTranscripts-SaraOgMonopolet" \
+--cont_window 40 \
+--save_dir "extended_dilemmas" \
+-- max_workers 10
 ```
 
-**Output:** Enhanced dilemmas with extended narrative and context.
+
+To see explanation of the parameters, run 
+```commandline
+python extend_dilemmas.py -h
+```
+
+
+**Output:** creates the new dir with the following structure:
+
+```
+extended_dilemmas/
+    ├── generated_samples/
+        ├── 0.json
+        ├── 1.json
+        ├── 2.json
+        ....
+    ├── ExtendedDilemmas -- gpt-5-mini -- ContextWindow40.json
+````
+
+`generated_samples` contains generated model outputs per sample (checkpoints). 
+In case of an error/issue, when running the script, it will skip already processed samples.
+Each json contains `meta_data` and `output` keys. `meta_data` is a dict with `filename` and `dilemma` keys, where json filename is saved and dilemma that was processed.
+`output` contains raw LLM response (only text of the response).
+
+
+`ExtendedDilemmas -- gpt-5-mini -- ContextWindow40.json` is a pandas dataframe, aggregated results from the `generated_samples` into df.
 
 ---
 
@@ -437,14 +466,77 @@ python scripts/05_enhance_context.py --input data/processed/matched --output dat
 Uses an LLM to extract one or more conclusions (final judgments or advice) per dilemma.
 
 ```bash
-python scripts/06_extract_conclusions.py --input data/processed/enhanced --output data/processed/conclusions
+python generate_conclusions_llm.py \
+--modelname "gpt-5-mini" \
+--parsed_approx_dilemmas_sections_path "ApproxDilemmasSegmentLocation.json" \
+--parsed_tshirt_sections_path "TshirtSectionSegmentsLocation.json" \
+--transcript_loaddir "SpeakerDiarizedTranscripts-SaraOgMonopolet" \
+--left_cont_window 20 \
+--save_dir "extracted_conclusions" \
+--max_workers 5
 ```
 
-**Output:** Final JSONL dataset with structured dilemmas, reasoning, and conclusions.
+To see all the args, run:
+```bash
+python generate_conclusions_llm.py -h
+```
 
+This script automatically extracts **potential solutions** discussed by podcast guests for each **listener dilemma** and groups them as follows:
+
+* **Acceptable solutions** — what the guests ultimately agreed the person *should* do.
+* **Not-acceptable solutions** — what they discussed but *advised against*.
+
+**Output**:
+
+After running the script, you will get the following directory structure:
+
+```
+extracted_conclusions/
+├── generated_samples/
+│   ├── 0.json
+│   ├── 1.json
+│   ├── 2.json
+│   └── ...
+└── agg_df.json
+```
+
+Each file in `generated_samples` contains the raw model output and parsed fields:
+
+```json
+{
+  "meta_data": {
+    "filename": "SaraOgMonopolet_2023_04_22.json",
+    "dilemma": "Min ven stjal fra arbejdet"
+  },
+  "output": "{... raw model JSON output string ...}",
+  "acceptable": [
+    "Fortæl chefen om situationen.",
+    "Få vennen til selv at melde sig."
+  ],
+  "not_acceptable": [
+    "Ignorér hændelsen og sig ikke noget."
+  ]
+}
+```
+
+Aggregated file (`agg_df.json`) merges all individual generations into a single dataframe-like JSON where each row corresponds to a generated sample.
+It includes all metadata (file, dilemma text) and model outputs, ready for further processing in `pandas`:
+
+| column           | description                                |
+| ---------------- | ------------------------------------------ |
+| `output`         | Raw text response from the model           |
+| `acceptable`     | List of extracted acceptable solutions     |
+| `not_acceptable` | List of extracted not-acceptable solutions |
+| `filename`       | Transcript source filename                 |
+| `dilemma`        | Dilemma text identifier                    |
+
+
+### Post Processing and Filtering
+
+After you run the script, it is suggested to filter out samples with no solution found. Our manual checks revealed that the model fails on the incorrectly matched dilemmas inside the transcript. 
+We disregarded these samples. The code is available in the [FilterConclusions.ipynb](FilterConclusions.ipynb).
+After running it, the new file, `extracted_conclusions/agg_df_filtered.json` will be created, with the rows from `extracted_conclusions/agg_df.json` with empty `acceptable` values removed.
 ---
-
-## Output Dataset Structure
 
 
 ---

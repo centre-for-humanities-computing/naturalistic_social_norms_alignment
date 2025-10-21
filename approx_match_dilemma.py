@@ -110,7 +110,7 @@ def run(args):
             dilemmas=parsed_dilemmas[filename]["dilemmas"],
             transcribed_data_segments=json.load(
                 open(
-                    os.path.join(args.speakers_loaddir, filename), "r"
+                    os.path.join(args.transcript_loaddir, filename), "r"
                 )
             )["segments"],
             n_chunks=args.n_chunks,
@@ -128,10 +128,10 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--embedding_model",
+        "--transcript_loaddir",
         type=str,
-        default="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-        help="SentenceTransformer model to use.",
+        default="SpeakerDiarizedTranscripts-SaraOgMonopolet",
+        help="path to dir, which contains transcript json files (with ot without speakers)",
     )
 
     parser.add_argument(
