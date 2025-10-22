@@ -4,7 +4,6 @@ import concurrent.futures
 import pandas as pd
 
 from openai import OpenAI
-import os
 
 def segments_to_sentences(segments):
     sentence_ends = "!?."

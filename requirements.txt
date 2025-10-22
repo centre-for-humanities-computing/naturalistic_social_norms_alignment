@@ -1,0 +1,9 @@
+openai-whisper==20250625
+torch==2.8.0
+sentence-transformers==5.1.1
+tqdm
+pyannote.audio==4.0.0
+pandas
+openai==2.0.1
+numpy==2.2.6
+thefuzz==0.22.1

@@ -65,7 +65,8 @@ pip install -r requirements.txt
 | `sentence-transformers`       | Semantic search between dilemmas and transcripts |
 | `pyannote.audio`              | Speaker diarization                              |
 
-Set the `HF_TOKEN` that will let you use `pyannote.audio` models. 
+Set the `HF_TOKEN` that will let you use `pyannote.audio` models.
+Set `OPENAI_KEY`if using openai models.
 
 Install `ffmpeg`.
 
