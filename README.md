@@ -664,8 +664,40 @@ df["first_person_extended_dilemma_gpt5mini"] = df["first_person_extended_dilemma
 df["extended_dilemma_gpt5mini"] = df["extended_dilemma_gpt5mini"].apply(lambda x: x.replace("Monopolet", "du"))
 ```
 
+Also, we noticed that the after the previous step, there are still some mentions of the monopolet and the letter markers. We run one more step with ChatGPT to remove them.
 
-### Translation
+
+The script is in the [postprocess_mentions_llm.py](postprocess_mentions_llm.py).
+
+
+```bash
+python postprocess_mentions_llm.py \
+--modelname "gpt-5-mini" \
+--save_dir "noletters_processed" \
+--solutions_dilemmas_all_path "first_person_rewriting_output/solutions_dilemmas_fper.json" \
+--max_workers 5
+```
+
+
+To see all the args, run:
+```bash
+python postprocess_mentions_llm.py -h
+```
+
+Output:
+
+```
+noletters_processed/
+├── samples-first_person_extended_dilemma__gpt5mini/
+│   ├── 0.json
+│   ├── 1.json
+│   ├── 2.json
+│   └── ...
+├── ....
+└── noletter_solutions_dilemmas_all.json
+```
+
+`noletter_solutions_dilemmas_all.json` contains same columns as the input one, but with additional postprocessed with `noletter` prefix. 
 
 ---
 
