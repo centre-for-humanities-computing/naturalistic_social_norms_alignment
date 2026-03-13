@@ -1,13 +1,15 @@
-# MonopoletKultur: Danish Cultural Alignment Dataset Pipeline based on `Sara og Monopolet`
+# Naturalistic measure of social norms alignment
 
-**MonopoletKultur** is a dataset from on Danish radio podcast **[_Sara & Monopolet_](https://www.dr.dk/lyd/p4/sara-og-monopolet-podcast-1090358387000)**, where guests discuss real-life moral dilemmas.  
-The goal is to extract, align, and structure these conversations into a dataset for studying **cultural value alignment**, **moral reasoning**, and **ethical decision-making** in Danish.
-
-This repo contains dataset creation pipeline.
+This repo contains code and annotation results for the Naturalistic measure of social norms alignment paper.
 
 ---
 
 ## Project Overview
+
+The pipeline to run solution extraction and postprocessing from the responses, and matchingscript is located in.
+The metrics calculation step is in.
+
+## Dataset Preparation
 
 This pipeline turns raw podcast episodes into structured alignment data by performing:
 
@@ -19,13 +21,6 @@ This pipeline turns raw podcast episodes into structured alignment data by perfo
 6. **Context Expansion (LLM)** – Expands the dilemma descriptions with full conversational context from the transcript.
 7. **Conclusion Extraction (LLM)** – Identifies one or more conclusions or resolutions per dilemma from the discussion.
 8. **Aggregate all the previous in one dataset** - For simplicity and usage, put all the data into one file.
-
-## Additional Steps
-- For our experiments, we additionally run the following:
-  - First person rewriting to evaluate the effects of model being aware of testing and simulate more natural user case.
-  - Translation to EN (extended dilemmas and solutions) to evaluate the language dependence.
-
----
 
 ## Expected Input
 
@@ -709,12 +704,7 @@ noletters_processed/
 If you use this pipeline or data in your research:
 
 ```
-@dataset{monoalign_2025,
-  title = {MonoAlign: Danish Cultural Alignment Dataset},
-  author = {Your Name},
-  year = {2025},
-  url = {https://github.com/yourusername/monoalign}
-}
+
 ```
 
 ---
@@ -722,5 +712,4 @@ If you use this pipeline or data in your research:
 ##  Contact
 
 For questions, collaborations, or cultural alignment research:
-**[[your.email@example.com](mailto:your.email@example.com)]**
 
