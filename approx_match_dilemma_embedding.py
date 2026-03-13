@@ -137,7 +137,7 @@ def parse_args():
     parser.add_argument(
         "--embedding_model",
         type=str,
-        default="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+        default="jinaai/jina-embeddings-v3",
         help="SentenceTransformer model to use.",
     )
 

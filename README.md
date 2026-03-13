@@ -6,8 +6,12 @@ This repo contains code and annotation results for the Naturalistic measure of s
 
 ## Project Overview
 
-The pipeline to run solution extraction and postprocessing from the responses, and matchingscript is located in.
-The metrics calculation step is in.
+The pipeline to run solution extraction and postprocessing from the responses, and matching scripts are located in:
+- [extract_process_solutions.py](framework/extract_process_solutions.py)
+- [matching_solutions.py](framework/matching_solutions.py)
+
+The metrics calculation step is in:
+- [calc_metrics.py](framework/calc_metrics.py)
 
 ## Dataset Preparation
 
@@ -20,7 +24,7 @@ This pipeline turns raw podcast episodes into structured alignment data by perfo
 5. **Text Alignment** – Uses embedding-based similarity search to approximately locate each dilemma in the transcribed dialogue.
 6. **Context Expansion (LLM)** – Expands the dilemma descriptions with full conversational context from the transcript.
 7. **Conclusion Extraction (LLM)** – Identifies one or more conclusions or resolutions per dilemma from the discussion.
-8. **Aggregate all the previous in one dataset** - For simplicity and usage, put all the data into one file.
+
 
 ## Expected Input
 
@@ -192,6 +196,8 @@ python match_dilemmas.py \
 --speakers_loaddir "Diarization -- hviske-v3-conversation -- sara-og-monopolet" \
 --savepath "ApproxDilemmasSegmentLocation.json"
 ```
+
+After the initial run, check with GPT-OSS-20b on correctness. Run [approx_match_dilemma_embedding.py](approx_match_dilemma_embedding.py).
 
 **Output:** json file, see example below:
 
@@ -540,162 +546,6 @@ We disregarded these samples. The code is available in the [FilterConclusions.ip
 After running it, the new file, `extracted_conclusions/agg_df_filtered.json` will be created, with the rows from `extracted_conclusions/agg_df.json` with empty `acceptable` values removed.
 
 ---
-
-## Aggregate all the previous in one dataset
-
-After all the previous steps are done, the dataset is aggregated and saved into one file.
-
-To do so, we suggest the following approach:
-
-```python
-import pandas as pd
-
-ext_dilemmas_gpt = pd.read_json("extended_dilemmas/ExtendedDilemmas--gpt-5-mini--ContextWindow40.json")
-solutions_df = pd.read_json("extracted_conclusions/agg_df_filtered.json")
-
-solutions_df = solutions_df.rename(columns={
-    "output": "raw_solutions_output_gpt5mini",
-    "dilemma": "original_dilemma", 
-    "filename": "episode_filename"
-})
-
-solutions_df = solutions_df.drop(columns=["len_acc"])
-
-ext_dilemmas_gpt = ext_dilemmas_gpt.rename(
-    columns = {
-        "output": "extended_dilemma_gpt5mini",
-        "dilemma": "original_dilemma", 
-        "filename": "episode_filename"
-    }
-)
-
-final_df = solutions_df.merge(
-    ext_dilemmas_gpt, 
-    left_on=["original_dilemma", "episode_filename"],
-    right_on=["original_dilemma", "episode_filename"],
-    how="left"
-)
-
-
-# We experimented with gemma 2 as well, so we have an additional artifact that we have included in the final dataset
-# ext_dilemmas_gemma = pd.read_json("extended_dilemmas_gemma/extended_dilemmas.json")
-# ext_dilemmas_gemma = ext_dilemmas_gpt.rename(
-#     columns = {
-#         "output": "extended_dilemma_gemma2_9b",
-#         "dilemma": "original_dilemma", 
-#         "filename": "episode_filename"
-#     }
-# )
-# final_df = solutions_df.merge(
-#     ext_dilemmas_gpt, 
-#     left_on=["original_dilemma", "episode_filename"],
-#     right_on=["original_dilemma", "episode_filename"],
-#     how="left"
-# )
-
-final_df.to_json("solutions_dilemmas_all.json")
-```
-
-## Additional Steps
-
-### First Person Rewriting
-
-We used chatGPT to rewrite the extended dilemmas into first person one. Here is an example that the model was presented with:
-
-````text
-Input:
-Adam skriver, at hans kæreste Robin arbejder for meget, og at han savner at bruge tid sammen med hende. Hun arbejder ofte til midnat, og det påvirker virkelig deres forhold. Adam er bekymret for, at de på et tidspunkt vil slå op. Hvad kan du foreslå, at Adam gør i denne situation?
-
-Output:
-Min kæreste Robin arbejder for meget, og jeg savner at bruge tid sammen med hende. Hun arbejder ofte til midnat, og det påvirker virkelig vores forhold. Jeg er bekymret for, at vi på et tidspunkt vil slå op. Hvad kan du foreslå, at jeg gør i denne situation?
-````
-
-We used the [make_person_resolution_llm.py](make_person_resolution_llm.py):
-
-```bash
-python make_person_resolution_llm.py \
---modelname "gpt-5-mini" \
---save_dir "first_person_rewriting_output" \
---solutions_dilemmas_all_path "solutions_dilemmas_all.json" \
---dilemma_colname "extended_dilemma_gpt5mini_x" \
---max_workers 5
-```
-
-
-To see all the args, run:
-```bash
-python make_person_resolution_llm.py -h
-```
-
-After running the script, you will get the following directory structure:
-
-```
-first_person_rewriting_output/
-├── generated_samples/
-│   ├── 0.json
-│   ├── 1.json
-│   ├── 2.json
-│   └── ...
-└── solutions_dilemmas_fper.json
-```
-
-Each file in `generated_samples` contains the raw model output and parsed fields:
-
-```json
-{
-  "meta_data": {
-    "idx": 0
-  },
-  "output": "str model output"
-}
-```
-
-`solutions_dilemmas_fper.json` is a pandas dataframe, saved to json format. It is the same dataframe as `solutions_dilemmas_all_path` with a new column `first_person_<modelaname>`.
-
-After that we noticed that some questions in the end contain the word Monopolet. We repaced it with "du" to avoid leaks as follows:
-
-```python
-df["first_person_extended_dilemma_gpt5mini"] = df["first_person_extended_dilemma_gpt5mini"].apply(lambda x: x.replace("Monopolet", "du"))
-df["extended_dilemma_gpt5mini"] = df["extended_dilemma_gpt5mini"].apply(lambda x: x.replace("Monopolet", "du"))
-```
-
-Also, we noticed that the after the previous step, there are still some mentions of the monopolet and the letter markers. We run one more step with ChatGPT to remove them.
-
-
-The script is in the [postprocess_mentions_llm.py](postprocess_mentions_llm.py).
-
-
-```bash
-python postprocess_mentions_llm.py \
---modelname "gpt-5-mini" \
---save_dir "noletters_processed" \
---solutions_dilemmas_all_path "first_person_rewriting_output/solutions_dilemmas_fper.json" \
---max_workers 5
-```
-
-
-To see all the args, run:
-```bash
-python postprocess_mentions_llm.py -h
-```
-
-Output:
-
-```
-noletters_processed/
-├── samples-first_person_extended_dilemma__gpt5mini/
-│   ├── 0.json
-│   ├── 1.json
-│   ├── 2.json
-│   └── ...
-├── ....
-└── noletter_solutions_dilemmas_all.json
-```
-
-`noletter_solutions_dilemmas_all.json` contains same columns as the input one, but with additional postprocessed with `noletter` prefix. 
-
----
-
 
 
 
