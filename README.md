@@ -554,7 +554,14 @@ After running it, the new file, `extracted_conclusions/agg_df_filtered.json` wil
 If you use this pipeline or data in your research:
 
 ```
-
+@inproceedings{
+kostiuk2026naturalistic,
+title={Naturalistic measure of social norms alignment},
+author={Yevhen Kostiuk and Kenneth Enevoldsen and Peter Bjerregaard Vahlstrup and M{\'a}rton Kardos and Kristoffer Nielbo},
+booktitle={ORACLE: The First Workshop on Open Reasoning Across Cultures {\&} Languages (ARR Submission)},
+year={2026},
+url={https://openreview.net/forum?id=yixV4mAHlH}
+}
 ```
 
 ---
@@ -562,4 +569,3 @@ If you use this pipeline or data in your research:
 ##  Contact
 
 For questions, collaborations, or cultural alignment research:
-

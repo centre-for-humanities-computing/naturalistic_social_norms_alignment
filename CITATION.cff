@@ -1,0 +1,31 @@
+cff-version: 1.2.0
+message: "If you use this pipeline or data in your research, please cite:"
+title: "Naturalistic measure of social norms alignment"
+authors:
+  - family-names: "Kostiuk"
+    given-names: "Yevhen"
+  - family-names: "Enevoldsen"
+    given-names: "Kenneth"
+  - family-names: "Vahlstrup"
+    given-names: "Peter Bjerregaard"
+  - family-names: "Kardos"
+    given-names: "Márton"
+  - family-names: "Nielbo"
+    given-names: "Kristoffer"
+preferred-citation:
+  type: paper-conference
+  title: "Naturalistic measure of social norms alignment"
+  authors:
+    - family-names: "Kostiuk"
+      given-names: "Yevhen"
+    - family-names: "Enevoldsen"
+      given-names: "Kenneth"
+    - family-names: "Vahlstrup"
+      given-names: "Peter Bjerregaard"
+    - family-names: "Kardos"
+      given-names: "Márton"
+    - family-names: "Nielbo"
+      given-names: "Kristoffer"
+  year: 2026
+  conference: "ORACLE: The First Workshop on Open Reasoning Across Cultures & Languages (ARR Submission)"
+  url: "https://openreview.net/forum?id=yixV4mAHlH"
